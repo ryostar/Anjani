@@ -59,6 +59,10 @@ class FedBase:
         """Get fed data from chat id"""
         return await cls.feds_db.find_one({"chats": chat_id})
 
+    async def get_fed_byowner(self, user_id):
+        """Get fed data from user id"""
+        return await self.feds_db.find_one({"owner": user_id})
+
     async def get_fed(self, fid):
         """Get fed data"""
         return await self.feds_db.find_one({"_id": fid})
@@ -534,7 +538,69 @@ class Federation(plugin.Plugin, FedBase):
             text += await self.bot.text(chat_id, "fed-myfeds-admin")
             for fed in fed_list:
                 text += f"- `{fed['_id']}`: {fed['name']}\n"
-
         if not text:
             text = await self.bot.text(chat_id, "fed-myfeds-no-admin")
         await message.reply_text(text)
+
+    @listener.on("setfedlog")
+    async def setlog(self, message):
+        chat_id = message.chat.id
+        if message.chat.type == "channel":
+            if not message.command:
+                return await message.reply_text(await self.bot.text(chat_id, "fed-set-log-args"))
+            fed_data = await self.get_fed(message.command[0])
+            if not fed_data:
+                return await message.reply_text(await self.bot.text(chat_id, "Fed not found!"))
+            await message.reply_text(
+                await self.bot.text(chat_id, "fed-check-identity"),
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                text="Click to confirm identity",
+                                callback_data=f"logfed_{fed_data['owner']}_{fed_data['_id']}",
+                            )
+                        ],
+                    ]
+                ),
+            )
+
+        elif message.chat.type in ["group", "supergroup"]:
+            owned_fed = await self.get_fed_byowner(message.from_user.id)
+            if not owned_fed:
+                return await message.reply_text(await self.bot.text(chat_id, "user-no-feds"))
+            await self.feds_db.update_one({"_id": owned_fed["_id"]}, {"$set": {"log": chat_id}})
+            await message.reply_text(
+                await self.bot.text(chat_id, "fed-log-set-group", owned_fed["name"])
+            )
+        else:
+            await message.reply_text(await self.bot.text(chat_id, "err-chat-groups"))
+
+    @listener.on(filters=filters.regex(r"logfed_(.*?)"), update="callbackquery")
+    async def confirm_log_fed(self, query):
+        chat_id = query.message.chat.id
+        user_id = query.from_user.id
+        _, owner_id, fid = query.data.split("_")
+        if user_id != int(owner_id):
+            return await query.edit_message_text(
+                await self.bot.text(chat_id, "fed-invalid-identity")
+            )
+        fed_data = await self.feds_db.find_one_and_update({"_id": fid}, {"$set": {"log": chat_id}})
+        await query.edit_message_text(
+            await self.bot.text(chat_id, "fed-log-set-chnl", fed_data["name"])
+        )
+
+    @listener.on("unsetfedlog")
+    async def unsetlog(self, message):
+        chat_id = message.chat.id
+        if message.chat.type == "private":
+            user_id = message.from_user.id
+            fed_data = await self.get_fed_byowner(user_id)
+            if not fed_data:
+                await message.reply_text(await self.bot.text(chat_id, "user-no-feds"))
+            await self.feds_db.update_one({"_id": fed_data["_id"]}, {"$set": {"log": None}})
+            await message.reply_text(
+                await self.bot.text(chat_id, "fed-log-unset", fed_data["name"])
+            )
+        else:
+            await message.reply_text(await self.bot.text(chat_id, "err-chat-private"))
