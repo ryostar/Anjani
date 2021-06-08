@@ -402,6 +402,10 @@ class Federation(plugin.Plugin, FedBase):
         LOGGER.debug(f"New fedban {user_id} on {fed_data['id']}")
         for chats in fed_data["chats"]:
             await self.bot.client.kick_chat_member(chats, user_id)
+        # send message to federation log
+        flog = fed_data.get("log", None)
+        if flog:
+            await self.bot.client.send_message(flog, text, disable_web_page_preview=True)
 
     @listener.on("unfban")
     async def unfban_user(self, message):
@@ -435,6 +439,10 @@ class Federation(plugin.Plugin, FedBase):
         LOGGER.debug(f"Unfedban {user.id} on {fed_data['id']}")
         for chats in fed_data["chats"]:
             await self.bot.client.unban_chat_member(chats, user.id)
+        # send message to federation log
+        flog = fed_data.get("log", None)
+        if flog:
+            await self.bot.client.send_message(flog, text, disable_web_page_preview=True)
 
     @listener.on(["fedstats", "fstats"])
     async def fed_stats(self, message):
