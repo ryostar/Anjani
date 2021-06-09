@@ -119,7 +119,9 @@ class Federation(plugin.Plugin, FedBase):
                 return await message.reply_text(await self.bot.text(chat_id, "federeation-limit"))
 
             async with self.lock:
-                await self.feds_db.insert_one({"_id": fed_id, "name": fed_name, "owner": owner_id})
+                await self.feds_db.insert_one(
+                    {"_id": fed_id, "name": fed_name, "owner": owner_id, "log": owner_id}
+                )
             LOGGER.debug(f"Created new fed {fed_name}({fed_id}) by {message.from_user.username}")
             text = await self.bot.text(chat_id, "new-federation", fed_name=fed_name, fed_id=fed_id)
             await asyncio.gather(
